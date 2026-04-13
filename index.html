@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="light">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -10,7 +10,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
     // ==================================================
-    // COLE SEU firebaseConfig AQUI
+    // COLE SUAS CHAVES DO FIREBASE AQUI EMBAIXO
     // ==================================================
     const firebaseConfig = {
       apiKey: "AIzaSyB-Zv9dNeW4VYv9oJIpEW3F-8VMQVrjOhY",
@@ -137,6 +137,14 @@
     .sub-sep{width:3px;height:3px;border-radius:50%;background:var(--border-2)}
     .gantt-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:18px 20px;overflow:hidden;animation:fadeUp .4s ease .2s both;transition:background var(--tr),border-color var(--tr)}
     .section-title{font-family:'Sora',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-3);margin-bottom:14px}
+    
+    /* MODIFICAÇÃO: CSS da Linha do Tempo atualizado */
+    #gantt-rows {
+      max-height: 220px; 
+      overflow-y: auto;  
+      padding-right: 8px;
+    }
+
     .gantt-head{display:grid;grid-template-columns:190px repeat(10,1fr);margin-bottom:8px}
     .gantt-head div{font-size:10px;font-family:'Sora',sans-serif;font-weight:700;color:var(--text-3);text-align:center}
     .gantt-row{display:grid;grid-template-columns:190px 1fr;align-items:center;margin-bottom:7px}
@@ -391,7 +399,7 @@
 </div>
 
 <script>
-const savedTheme=localStorage.getItem('stor-theme')||'light';
+const savedTheme=localStorage.getItem('stor-theme')||'dark';
 document.documentElement.setAttribute('data-theme',savedTheme);
 function toggleTheme(){const n=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('stor-theme',n);}
 document.getElementById('auth-theme-btn').addEventListener('click',toggleTheme);
@@ -417,6 +425,20 @@ async function launchApp(user,profile){document.getElementById('auth-screen').st
 document.getElementById('logout-btn').addEventListener('click',()=>{document.getElementById('logout-pop').classList.toggle('hidden');});
 function closeLO(){document.getElementById('logout-pop').classList.add('hidden');}
 async function doLogout(){closeLO();await auth.signOut();document.getElementById('app').style.display='none';document.getElementById('auth-screen').style.display='';clearMsgs();setBtnLoad('btn-login',false,'Entrar no Sistema');setBtnLoad('btn-reg',false,'Criar Conta');showToast('Logout realizado.','success');}
+
+/* NOVA FUNÇÃO: Excluir Tarefa */
+async function deleteTask(tid) {
+  if(!confirm('Deseja realmente excluir esta tarefa?')) return;
+  try {
+    await db.collection('tasks').doc(_uid).collection('items').doc(tid).delete();
+    _tasks = _tasks.filter(t => t.id !== tid); 
+    renderAll(_tasks, _uid); 
+    showToast('Tarefa excluída!', 'success');
+  } catch(e) {
+    showToast('Erro ao excluir.', 'error');
+  }
+}
+
 async function loadTasks(uid){try{const s=await db.collection('tasks').doc(uid).collection('items').orderBy('createdAt','asc').get();if(s.empty)return getDefTasks();return s.docs.map(d=>({id:d.id,...d.data()}));}catch(e){return getDefTasks();}}
 async function addTask(uid,task){const r=await db.collection('tasks').doc(uid).collection('items').add({...task,createdAt:firebase.firestore.FieldValue.serverTimestamp()});return r.id;}
 async function updTask(uid,tid,data){await db.collection('tasks').doc(uid).collection('items').doc(tid).update(data);}
@@ -430,7 +452,10 @@ function renderAll(tasks,uid){_uid=uid;_tasks=tasks;renderGantt(tasks);renderKan
 function renderGantt(tasks){const clients=[...new Set(tasks.map(t=>t.client))].slice(0,4);document.getElementById('gantt-rows').innerHTML=clients.map((c,i)=>{const d=GD[c]||{abbr:c.split(' ').map(w=>w[0]).join('').slice(0,2),off:i*8,w:50,pct:50+i*5,label:c};const col=COLS_MAP[i%COLS_MAP.length];const g=`linear-gradient(90deg,${col},${col}cc)`;return`<div class="gantt-row"><div class="g-label"><div class="g-av" style="background:${g}">${d.abbr}</div><span class="g-name">${c}</span></div><div class="g-track"><div class="g-bar" style="left:${d.off}%;width:${d.w}%;background:${g}"><span class="g-bar-label">${d.label}</span>${d.pct}%</div></div></div>`;}).join('');}
 const COLS=[{key:'aguardando',label:'Aguardando',dot:'dot-aguardando'},{key:'progress',label:'Em Progresso',dot:'dot-progress'},{key:'editing',label:'Revisão',dot:'dot-editing'},{key:'done',label:'Concluído',dot:'dot-done'}];
 function renderKanban(tasks){const b=document.getElementById('kanban-board');b.innerHTML=COLS.map(col=>{const ct=tasks.filter(t=>t.status===col.key);return`<div class="k-col"><div class="k-col-head"><span class="k-col-dot ${col.dot}"></span><span class="k-col-title">${col.label}</span><span class="k-col-count">${ct.length}</span></div>${ct.map(t=>renderCard(t)).join('')}<div class="empty-add" onclick="openModal('${col.key}')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Adicionar tarefa</div></div>`;}).join('');b.querySelectorAll('.star-btn').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const id=btn.dataset.id;const task=_tasks.find(t=>t.id===id);if(!task)return;task.starred=!task.starred;btn.classList.toggle('on',task.starred);if(_uid&&id.length>6){try{await updTask(_uid,id,{starred:task.starred});}catch(e){}}});});}
-function renderCard(t){const g=GRADS[t.color]||`linear-gradient(135deg,${t.color||'#4a6cf7'},${t.color||'#4a6cf7'}cc)`;const abbr=(GD[t.client]?.abbr||t.client.split(' ').map(w=>w[0]).join('')).slice(0,2).toUpperCase();const stMap={aguardando:'tag-gray',progress:'tag-blue',editing:'tag-purple',done:'tag-green'};const stLbl={aguardando:'Pendente',progress:'Em curso',editing:'Revisão',done:'Concluído'};const prog=(t.status==='progress'||t.status==='editing')&&t.progress>0?`<div class="prog-wrap"><div class="prog-meta"><span>Progresso</span><strong style="color:${t.color||'var(--blue)'}">${t.progress}%</strong></div><div class="prog-bar"><div class="prog-fill" style="width:${t.progress}%;background:${g}"></div></div></div>`:'';const body=(t.status==='editing'||t.status==='done')?`<div class="check-wrap"><span class="chk done"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span><span class="c-text">${t.description||t.title}</span></div><div class="check-wrap"><span class="chk todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></span><span class="c-text">Validação pelo cliente</span></div>`:`<div class="card-item"><div class="c-av" style="background:${g}">${abbr}</div><span class="c-text">${t.description||t.title}</span></div>`;return`<div class="card"><div class="card-stripe" style="background:${g}"></div><div class="card-head"><span class="card-title-text">${t.title}</span><button class="card-menu-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div>${body}${prog}<div class="card-foot"><div class="foot-stats"><div class="foot-stat"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${t.comments||0}</div><div class="foot-stat"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>${t.attachments||0}</div></div><span class="tag ${stMap[t.status]}">${stLbl[t.status]}</span><button class="star-btn ${t.starred?'on':''}" data-id="${t.id}"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button></div></div>`;}
+
+/* MODIFICAÇÃO: Botão de Lixeira inserido no renderCard */
+function renderCard(t){const g=GRADS[t.color]||`linear-gradient(135deg,${t.color||'#4a6cf7'},${t.color||'#4a6cf7'}cc)`;const abbr=(GD[t.client]?.abbr||t.client.split(' ').map(w=>w[0]).join('')).slice(0,2).toUpperCase();const stMap={aguardando:'tag-gray',progress:'tag-blue',editing:'tag-purple',done:'tag-green'};const stLbl={aguardando:'Pendente',progress:'Em curso',editing:'Revisão',done:'Concluído'};const prog=(t.status==='progress'||t.status==='editing')&&t.progress>0?`<div class="prog-wrap"><div class="prog-meta"><span>Progresso</span><strong style="color:${t.color||'var(--blue)'}">${t.progress}%</strong></div><div class="prog-bar"><div class="prog-fill" style="width:${t.progress}%;background:${g}"></div></div></div>`:'';const body=(t.status==='editing'||t.status==='done')?`<div class="check-wrap"><span class="chk done"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span><span class="c-text">${t.description||t.title}</span></div><div class="check-wrap"><span class="chk todo"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></span><span class="c-text">Validação pelo cliente</span></div>`:`<div class="card-item"><div class="c-av" style="background:${g}">${abbr}</div><span class="c-text">${t.description||t.title}</span></div>`;return`<div class="card"><div class="card-stripe" style="background:${g}"></div><div class="card-head"><span class="card-title-text">${t.title}</span><button class="card-menu-btn" onclick="event.stopPropagation(); deleteTask('${t.id}')" title="Excluir tarefa"><svg viewBox="0 0 24 24" style="stroke: var(--red);"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>${body}${prog}<div class="card-foot"><div class="foot-stats"><div class="foot-stat"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${t.comments||0}</div><div class="foot-stat"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>${t.attachments||0}</div></div><span class="tag ${stMap[t.status]}">${stLbl[t.status]}</span><button class="star-btn ${t.starred?'on':''}" data-id="${t.id}"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button></div></div>`;}
+
 function renderRP(tasks){const cl=[...new Set(tasks.map(t=>t.client))].slice(0,4);const co=['#4a6cf7','#8b5cf6','#ec4899','#f97316'];const ti=['12:00–13:00','13:00–14:00','14:00–15:00','15:00–16:00'];const C=2*Math.PI*19;document.getElementById('rp-schedule').innerHTML=cl.map((c,i)=>`<div class="plan-item"><div class="plan-dot-v" style="background:${co[i%4]}"></div><div><div class="plan-time">${ti[i%4]}</div><div class="plan-name">${c}</div></div></div>`).join('');document.getElementById('rp-efficiency').innerHTML=cl.map((c,i)=>{const ct=tasks.filter(t=>t.client===c);const done=ct.filter(t=>t.status==='done').length;const pct=ct.length?Math.round(done/ct.length*100):50+i*8;const off=C-C*pct/100;const ab=c.split(' ').slice(0,2).map(w=>w.slice(0,2)).join('');return`<div class="eff-item"><div class="eff-ring"><svg width="46" height="46" viewBox="0 0 46 46"><circle class="ring-bg" cx="23" cy="23" r="19"/><circle class="ring-fill" cx="23" cy="23" r="19" stroke="${co[i]}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg><div class="ring-num">${pct}</div></div><div class="eff-lbl">${ab}</div></div>`;}).join('');const counts=cl.map(c=>tasks.filter(t=>t.client===c).length*35+80);const mx=Math.max(...counts);document.getElementById('rp-bars').innerHTML=cl.map((c,i)=>{const h=Math.round(counts[i]/mx*52);const ab=c.split(' ').slice(0,2).map(w=>w[0]).join('');return`<div class="bc-item"><div class="bc-val">${counts[i]}</div><div class="bc-bar" style="height:${h}px;background:${co[i]};opacity:.85"></div><div class="bc-lbl">${ab}</div></div>`;}).join('');}
 function openModal(st){document.getElementById('modal').classList.remove('hidden');if(st)document.getElementById('m-status').value=st;}
 function closeModal(){document.getElementById('modal').classList.add('hidden');['m-title','m-client','m-desc'].forEach(id=>{document.getElementById(id).value='';});document.getElementById('m-progress').value='0';document.getElementById('m-status').value='aguardando';document.getElementById('m-priority').value='normal';}
